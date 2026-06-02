@@ -233,8 +233,6 @@ with st.sidebar:
             st.error("File tidak ditemukan. Upload CSV di atas.")
             st.stop()
 
-    df = load_data(uploaded_file if uploaded_file else "clean_diabetes_analysis_final-4 (1).csv")
-
     status_filter = st.multiselect(
         "Status Diabetes",
         options=["Non-Diabetes (0)", "Diabetes (1)"],
