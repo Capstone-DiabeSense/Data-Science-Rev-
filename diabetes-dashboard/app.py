@@ -10,7 +10,63 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from scipy.stats import chi2_contingency
+try:
+    from scipy.stats import chi2_contingency
+except (ImportError, AttributeError):
+    def chi2_contingency(observed, correction=True):
+        import math
+        def gammp(a, x):
+            if x < 0.0 or a <= 0.0:
+                return 0.0
+            if x < a + 1.0:
+                sum_val = 1.0 / a
+                ap = a
+                delta = sum_val
+                for i in range(1, 100):
+                    ap += 1.0
+                    delta *= x / ap
+                    sum_val += delta
+                    if abs(delta) < abs(sum_val) * 1e-15:
+                        break
+                return sum_val * math.exp(-x + a * math.log(x) - math.lgamma(a))
+            else:
+                tiny = 1e-30
+                b = x + 1.0 - a
+                c = 1.0 / tiny
+                d = 1.0 / b
+                h = d
+                for i in range(1, 100):
+                    an = -i * (i - a)
+                    b += 2.0
+                    d = an * d + b
+                    if abs(d) < tiny:
+                        d = tiny
+                    c = b + an / c
+                    if abs(c) < tiny:
+                        c = tiny
+                    d = 1.0 / d
+                    delta = c * d
+                    h *= delta
+                    if abs(delta - 1.0) < 1e-15:
+                        break
+                return 1.0 - h * math.exp(-x + a * math.log(x) - math.lgamma(a))
+
+        obs = np.array(observed, dtype=float)
+        row_sums = obs.sum(axis=1)
+        col_sums = obs.sum(axis=0)
+        total = obs.sum()
+        
+        expected = np.outer(row_sums, col_sums) / total
+        dof = (obs.shape[0] - 1) * (obs.shape[1] - 1)
+        
+        if dof == 1 and correction:
+            chi2 = np.sum((np.abs(obs - expected) - 0.5) ** 2 / expected)
+        else:
+            chi2 = np.sum((obs - expected) ** 2 / expected)
+            
+        p = 1.0 - gammp(dof / 2.0, chi2 / 2.0)
+        return chi2, p, dof, expected
+
 from style import DARK_CSS, LIGHT_CSS, DARK_PLOTLY, LIGHT_PLOTLY, get_colors
 
 # ============================================================
@@ -18,19 +74,19 @@ from style import DARK_CSS, LIGHT_CSS, DARK_PLOTLY, LIGHT_PLOTLY, get_colors
 # ============================================================
 
 st.set_page_config(
-    page_title="DiabeSense · Dashboard Analisis",
-    page_icon="🩺",
+    page_title="DiabeSense · Risk Analytics",
+    page_icon="◆",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # ── DARK / LIGHT TOGGLE ────────────────────────────────────
 if "dark_mode" not in st.session_state:
-    st.session_state.dark_mode = True   # default: dark (sesuai web utama)
+    st.session_state.dark_mode = False   # default: light
 
 # Toggle button di pojok kanan atas via sidebar top
 with st.sidebar:
-    mode_label = "☀️ Light Mode" if st.session_state.dark_mode else "🌙 Dark Mode"
+    mode_label = "Light Mode" if st.session_state.dark_mode else "Dark Mode"
     if st.button(mode_label, use_container_width=True):
         st.session_state.dark_mode = not st.session_state.dark_mode
         st.rerun()
@@ -94,46 +150,36 @@ def load_data(path) -> pd.DataFrame:
 # ============================================================
 
 with st.sidebar:
-    fg   = "#e8f4f0" if is_dark else "#0a1628"
-    muted = "#6b8fa8" if is_dark else "#4a7a6a"
+    fg   = "#e3ede9" if is_dark else "#182d28"
+    muted = "#8ba6a0" if is_dark else "#537069"
     accent = C["accent"]
 
     st.markdown(f"""
-    <div style="padding:0.75rem 0 0.5rem 0;">
-        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.25rem;">
-            <span style="font-size:1.4rem;">🩺</span>
-            <span style="font-size:1.05rem;font-weight:800;color:{accent};
-                letter-spacing:-0.02em;">DiabeSense</span>
+    <div style="padding:0.75rem 0 1.25rem 0; text-align:center;">
+        <div style="display:inline-flex; align-items:center; justify-content:center; gap:0.5rem; margin-bottom:0.35rem;">
+            <span style="font-size:1.25rem; font-weight:800; color:#ffffff; letter-spacing:-0.02em; line-height:1;">DiabeSense</span>
         </div>
-        <div style="font-size:0.75rem;color:{muted};padding-left:0.1rem;">
-            Dashboard Analisis· BRFSS 2015
+        <div style="font-size:0.75rem; color:rgba(255,255,255,0.55); letter-spacing:0.04em;">
+            Risk Analytics Platform
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    st.divider()
-
     menu = st.radio(
-        "Navigasi",
+        " ",
         [
-            "🏠 Overview Dataset",
-            "📊 Q1 — Faktor Risiko Utama",
-            "🥗 Q2 — Gaya Hidup & Kebiasaan",
-            "👤 Q3 — Demografis: Usia & BMI",
-            "❤️ Q4 — Komorbiditas Klinis",
-            "💰 Q5 — Sosial-Ekonomi & Akses",
-            "📝 Kesimpulan Analisis",
+            "Overview",
+            "Risk Factors",
+            "Lifestyle Analysis",
+            "Demographics & BMI",
+            "Metabolic Risk",
+            "Socioeconomic Analysis",
+            "Conclusions",
         ],
         label_visibility="collapsed"
     )
 
     st.divider()
-    st.markdown(
-        f"<div style='font-size:0.75rem;font-weight:600;color:{muted};"
-        "text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.75rem;'>"
-        "Filter Data</div>",
-        unsafe_allow_html=True
-    )
 
     uploaded_file = st.file_uploader(
         "Upload dataset CSV", type=["csv"],
@@ -142,12 +188,12 @@ with st.sidebar:
 
     if uploaded_file:
         raw_df = pd.read_csv(uploaded_file)
-        st.success(f"✅ {raw_df.shape[0]:,} baris dimuat")
+        st.success(f"{raw_df.shape[0]:,} baris dimuat")
     else:
         try:
             raw_df = pd.read_csv("clean_diabetes_analysis_final-4 (1).csv")
         except FileNotFoundError:
-            st.error("⚠️ File tidak ditemukan. Upload CSV di atas.")
+            st.error("File tidak ditemukan. Upload CSV di atas.")
             st.stop()
 
     df = load_data(uploaded_file if uploaded_file else "clean_diabetes_analysis_final-4 (1).csv")
@@ -174,21 +220,28 @@ with st.sidebar:
     ]
 
     st.divider()
-    st.caption("© 2026 DiabeSense · Analisis Indonesia")
+    st.markdown(f"""
+    <div class="dataset-box">
+        <div class="ds-label">Dataset</div>
+        <div class="ds-value">{len(df_filtered):,} responden · {len(df_filtered.columns)} variabel</div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.caption("© 2026 DiabeSense")
 
 # ============================================================
 # PAGE: OVERVIEW DATASET
 # ============================================================
 
-if menu == "🏠 Overview Dataset":
-    st.title("🩺 Dashboard Analisis — Skrining Diabetes Indonesia")
-    st.markdown(
-        "<span style='color:#737373;font-size:0.95rem;'>"
-        "Dataset BRFSS 2015 · Analisis eksploratif 16 indikator kesehatan "
-        "untuk identifikasi faktor risiko diabetes.</span>",
-        unsafe_allow_html=True
-    )
-    st.divider()
+if menu == "Overview":
+    # ── HERO CARD
+    st.markdown("""
+    <div class="hero-card">
+        <div class="hero-badge">Dashboard</div>
+        <h1 class="hero-title">Diabetes Risk Overview</h1>
+        <p class="hero-desc">Ringkasan analitik komprehensif terhadap faktor risiko diabetes
+        berdasarkan data klinis, metabolik, gaya hidup, dan sosial ekonomi.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
     # ── METRIK UTAMA ──────────────────────────────────────────
     total         = len(df_filtered)
@@ -198,23 +251,28 @@ if menu == "🏠 Overview Dataset":
     avg_bmi       = df_filtered["BMI"].mean()
     avg_age_code  = df_filtered["Age"].mean()
 
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    c1, c2, c3, c4 = st.columns(4)
     with c1:
         st.markdown(f"""<div class="metric-card">
             <h1>{total:,}</h1><p>Total Responden</p></div>""", unsafe_allow_html=True)
     with c2:
-        st.markdown(f"""<div class="metric-card-red">
-            <h1>{n_diabetes:,}</h1><p>Penderita Diabetes</p></div>""", unsafe_allow_html=True)
-    with c3:
-        st.markdown(f"""<div class="metric-card-green">
-            <h1>{n_nondiabetes:,}</h1><p>Non-Diabetes</p></div>""", unsafe_allow_html=True)
-    with c4:
-        st.markdown(f"""<div class="metric-card-orange">
-            <h1>{pct_diabetes:.1f}%</h1><p>Prevalensi Diabetes</p></div>""", unsafe_allow_html=True)
-    with c5:
         st.markdown(f"""<div class="metric-card">
-            <h1>{avg_bmi:.1f}</h1><p>Rata-rata BMI</p></div>""", unsafe_allow_html=True)
+            <h1>{n_diabetes:,}</h1><p>Kasus Diabetes</p></div>""", unsafe_allow_html=True)
+    with c3:
+        st.markdown(f"""<div class="metric-card">
+            <h1>{n_nondiabetes:,}</h1><p>Non Diabetes</p></div>""", unsafe_allow_html=True)
+    with c4:
+        st.markdown(f"""<div class="metric-card">
+            <h1>{pct_diabetes:.1f}%</h1><p>Prevalensi Diabetes</p></div>""", unsafe_allow_html=True)
 
+    st.markdown(f"""
+    <div class="summary-box">
+        <h3>Executive Summary — Ringkasan 5 Pertanyaan Bisnis</h3>
+        <p>Dari {total:,} responden BRFSS 2015, prevalensi diabetes mencapai sekitar {pct_diabetes:.1f}%.
+        Analisis ini menjawab 5 pertanyaan bisnis utama untuk mengidentifikasi faktor-faktor
+        yang paling berkaitan dengan risiko diabetes.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
     st.divider()
 
@@ -389,12 +447,16 @@ if menu == "🏠 Overview Dataset":
         missing = missing.sort_values("Missing Values", ascending=False)
 
         if missing["Missing Values"].sum() == 0:
-            st.success("✅ Tidak ada missing values pada dataset.")
+            st.success("Tidak ada missing values pada dataset.")
+            miss_scale = (
+                [[0, "#182825"], [1, "#f25c5c"]] if is_dark
+                else [[0, "#e8f3f0"], [1, "#dc2626"]]
+            )
             fig_miss = px.bar(
                 missing.head(10), x="Persentase (%)", y="Fitur",
                 orientation="h",
                 color="Persentase (%)",
-                color_continuous_scale=[[0,"#ebebeb"],[1,"#dc2626"]],
+                color_continuous_scale=miss_scale,
                 text="Persentase (%)"
             )
             fig_miss.update_traces(texttemplate="%{text:.2f}%", textposition="outside")
@@ -440,7 +502,7 @@ if menu == "🏠 Overview Dataset":
 
     # ── BARIS 6: Preview & Statistik Deskriptif ──────────────
     st.subheader("6 · Preview & Statistik Deskriptif")
-    tab1, tab2, tab3 = st.tabs(["📋 Preview Data", "📊 Statistik Deskriptif", "ℹ️ Kamus Fitur"])
+    tab1, tab2, tab3 = st.tabs(["Preview Data", "Statistik Deskriptif", "Kamus Fitur"])
 
     with tab1:
         n_show = st.slider("Jumlah baris yang ditampilkan", 5, 50, 10)
@@ -449,8 +511,8 @@ if menu == "🏠 Overview Dataset":
     with tab2:
         st.dataframe(
             df_filtered.describe().T.round(2)
-            .style.bar(subset=["mean"], color="#d97b4544")
-            .bar(subset=["std"],  color="#3d9e8c44"),
+            .style.bar(subset=["mean"], color="#43C59A44")
+            .bar(subset=["std"],  color="#8ba6a044"),
             use_container_width=True
         )
 
@@ -482,14 +544,14 @@ if menu == "🏠 Overview Dataset":
 # PAGE: Q1 — FAKTOR RISIKO UTAMA
 # ============================================================
 
-elif menu == "📊 Q1 — Faktor Risiko Utama":
-    st.title("Q1 — Faktor Risiko Utama")
-    st.markdown(
-        "<span style='color:#737373;'>Dari 16 indikator kesehatan, faktor mana yang paling "
-        "signifikan membedakan penderita dan non-penderita diabetes?</span>",
-        unsafe_allow_html=True
-    )
-    st.divider()
+elif menu == "Risk Factors":
+    st.markdown("""
+    <div class="hero-card">
+        <div class="hero-badge">Analisis Faktor</div>
+        <h1 class="hero-title">Q1 — Faktor Risiko Utama</h1>
+        <p class="hero-desc">Dari 16 indikator kesehatan, faktor mana yang paling signifikan membedakan penderita dan non-penderita diabetes?</p>
+    </div>
+    """, unsafe_allow_html=True)
 
     num_cols = [c for c in df_filtered.columns
                 if df_filtered[c].dtype in [np.float64, np.int64]
@@ -506,11 +568,15 @@ elif menu == "📊 Q1 — Faktor Risiko Utama":
 
     with col1:
         st.subheader("Korelasi Absolut Terhadap Diabetes")
+        corr_scale = (
+            [[0, "#182825"], [1, "#43C59A"]] if is_dark
+            else [[0, "#e8f3f0"], [1, "#33b087"]]
+        )
         fig_corr = px.bar(
             corr_df, x="Korelasi |r|", y="Fitur",
             orientation="h",
             color="Korelasi |r|",
-            color_continuous_scale=[[0,"#ebebeb"],[1,"#d97b45"]],
+            color_continuous_scale=corr_scale,
             text=corr_df["Korelasi |r|"].round(3),
         )
         fig_corr.update_traces(textposition="outside", texttemplate="%{text:.3f}")
@@ -525,15 +591,20 @@ elif menu == "📊 Q1 — Faktor Risiko Utama":
     with col2:
         st.subheader("Top 5 Faktor Risiko")
         top5 = corr_df.head(5)
-        rank_colors = ["#1a1a1a","#2d2d2d","#404040","#595959","#737373"]
+        rank_colors = (
+            ["#10221e", "#162f2a", "#1d3c35", "#244941", "#2b564c"] if is_dark
+            else ["#e6f5f0", "#d1ebe2", "#bde1d4", "#a9d7c6", "#94cdc7"]
+        )
+        text_color = "#e3ede9" if is_dark else "#182d28"
         for i, row in top5.iterrows():
             st.markdown(f"""
-            <div style="background:{rank_colors[i]};color:#ffffff;
+            <div style="background:{rank_colors[i]};color:{text_color};
                 padding:10px 14px;border-radius:0.625rem;margin-bottom:8px;
-                display:flex;justify-content:space-between;align-items:center;">
+                display:flex;justify-content:space-between;align-items:center;
+                border:1px solid {'#1f3a34' if is_dark else '#c2ebd9'};">
                 <span style="font-weight:600;font-size:0.9rem;">#{i+1} {row['Fitur']}</span>
                 <span style="font-size:1rem;font-weight:700;
-                    background:rgba(255,255,255,0.15);
+                    background:rgba({'255,255,255' if is_dark else '0,0,0'},0.1);
                     padding:2px 8px;border-radius:4px;">
                     {row['Korelasi |r|']:.4f}
                 </span>
@@ -543,7 +614,7 @@ elif menu == "📊 Q1 — Faktor Risiko Utama":
         st.dataframe(
             corr_df[["Fitur","Korelasi |r|","Nilai r"]].style.format(
                 {"Korelasi |r|": "{:.4f}", "Nilai r": "{:.4f}"}
-            ).bar(subset=["Korelasi |r|"], color="#d97b4566"),
+            ).bar(subset=["Korelasi |r|"], color="#43C59A66"),
             use_container_width=True, height=280
         )
 
@@ -555,18 +626,22 @@ elif menu == "📊 Q1 — Faktor Risiko Utama":
     top_feats   = corr_df.head(top_n)["Fitur"].tolist() + ["Diabetes_binary"]
     corr_matrix = df_filtered[top_feats].corr().round(3)
 
+    heat_scale = (
+        [[0,"#f25c5c"],[0.5,"#0e1615"],[1,"#43C59A"]] if is_dark
+        else [[0,"#dc2626"],[0.5,"#ffffff"],[1,"#33b087"]]
+    )
     fig_heat = px.imshow(
         corr_matrix, text_auto=True,
-        color_continuous_scale=[[0,"#3d9e8c"],[0.5,"#ffffff"],[1,"#dc2626"]],
+        color_continuous_scale=heat_scale,
         zmin=-1, zmax=1, aspect="auto"
     )
     apply_theme(fig_heat, 500)
     fig_heat.update_layout(margin=dict(t=20,b=20))
     st.plotly_chart(fig_heat, use_container_width=True)
 
-    st.markdown("""<div class="insight-box">
-    <h4>📊 Insight — Faktor Risiko Utama</h4>
-    <p>Analisis korelasi terhadap 16 indikator kesehatan menunjukkan bahwa lima faktor dengan hubungan terkuat terhadap diabetes adalah <b>GenHlth</b> (|r| = 0,4076), <b>HighBP</b> (|r| = 0,3815), <b>BMI</b> (|r| = 0,2934), <b>HighChol</b> (|r| = 0,2892), dan <b>Age</b> (|r| = 0,2787).<br><br>
+    st.markdown("""<div class="hero-card">
+    <h1 class="hero-title">Insight — Faktor Risiko Utama</h1>
+    <p class="hero-desc">Analisis korelasi terhadap 16 indikator kesehatan menunjukkan bahwa lima faktor dengan hubungan terkuat terhadap diabetes adalah <b>GenHlth</b> (|r| = 0,4076), <b>HighBP</b> (|r| = 0,3815), <b>BMI</b> (|r| = 0,2934), <b>HighChol</b> (|r| = 0,2892), dan <b>Age</b> (|r| = 0,2787).<br><br>
     GenHlth merupakan indikator tunggal terkuat — semakin buruk kondisi kesehatan yang dilaporkan responden, semakin sering ditemukan pada kelompok diabetes. HighBP berada di posisi kedua dengan nilai yang sangat dekat, menunjukkan bahwa hipertensi merupakan karakteristik yang paling sering menyertai penderita diabetes pada dataset ini.<br><br>
     Sebaliknya, faktor gaya hidup seperti PhysActivity (|r| = 0,1587), Smoker (|r| = 0,0860), Veggies (|r| = 0,0783), dan HvyAlcoholConsump (|r| = 0,0949) memiliki korelasi lebih rendah — artinya kemampuannya membedakan kelompok risiko lebih kecil dibandingkan faktor klinis.<br><br>
     <b>Implikasi:</b> Sistem skrining sebaiknya memprioritaskan indikator klinis (kondisi kesehatan umum, hipertensi, BMI, kolesterol, usia) karena memiliki hubungan paling kuat dengan status diabetes dan menjadi dasar pemilihan fitur untuk model machine learning.</p>
@@ -576,14 +651,14 @@ elif menu == "📊 Q1 — Faktor Risiko Utama":
 # PAGE: Q2 — GAYA HIDUP & KEBIASAAN
 # ============================================================
 
-elif menu == "🥗 Q2 — Gaya Hidup & Kebiasaan":
-    st.title("Q2 — Gaya Hidup & Kebiasaan")
-    st.markdown(
-        "<span style='color:#737373;'>Apakah individu yang tidak aktif secara fisik dan "
-        "jarang mengonsumsi sayuran memiliki proporsi diabetes yang signifikan lebih tinggi?"
-        "</span>", unsafe_allow_html=True
-    )
-    st.divider()
+elif menu == "Lifestyle Analysis":
+    st.markdown("""
+    <div class="hero-card">
+        <div class="hero-badge">Analisis Kebiasaan</div>
+        <h1 class="hero-title">Q2 — Gaya Hidup & Kebiasaan</h1>
+        <p class="hero-desc">Apakah individu yang tidak aktif secara fisik dan jarang mengonsumsi sayuran memiliki proporsi diabetes yang signifikan lebih tinggi?</p>
+    </div>
+    """, unsafe_allow_html=True)
 
     lifestyle = df_filtered.copy()
     lifestyle["Kelompok"] = (
@@ -647,7 +722,7 @@ elif menu == "🥗 Q2 — Gaya Hidup & Kebiasaan":
         )
         try:
             chi2, p, dof, _ = chi2_contingency(contingency)
-            significance = "✅ SIGNIFIKAN" if p < 0.05 else "❌ Tidak Signifikan"
+            significance = "SIGNIFIKAN" if p < 0.05 else "Tidak Signifikan"
             st.metric("Chi-square Statistic", f"{chi2:,.2f}")
             st.metric("P-value", f"{p:.6f}")
             st.metric("Derajat Kebebasan (dof)", dof)
@@ -691,9 +766,9 @@ elif menu == "🥗 Q2 — Gaya Hidup & Kebiasaan":
         fig_vg.update_layout(showlegend=False, yaxis_range=[0, max(vg.values)*1.2])
         st.plotly_chart(fig_vg, use_container_width=True)
 
-    st.markdown("""<div class="insight-box">
-    <h4>🥗 Insight — Gaya Hidup & Kebiasaan</h4>
-    <p>Terdapat perbedaan prevalensi diabetes yang besar antar kelompok gaya hidup. Kelompok <b>tidak aktif fisik + tidak rutin sayur</b> memiliki prevalensi tertinggi sebesar <b>65,06%</b> — artinya sekitar dua dari tiga individu dalam kelompok ini adalah penderita diabetes.<br><br>
+    st.markdown("""<div class="hero-card">
+    <h1 class="hero-title">Insight — Gaya Hidup & Kebiasaan</h1>
+    <p class="hero-desc">Terdapat perbedaan prevalensi diabetes yang besar antar kelompok gaya hidup. Kelompok <b>tidak aktif fisik + tidak rutin sayur</b> memiliki prevalensi tertinggi sebesar <b>65,06%</b> — artinya sekitar dua dari tiga individu dalam kelompok ini adalah penderita diabetes.<br><br>
     Sebaliknya, kelompok <b>aktif fisik + rutin sayur</b> memiliki prevalensi terendah sebesar <b>43,34%</b>. Selisih antar kedua kelompok mencapai <b>21,72 poin persentase</b>.<br><br>
     Pola bertingkat terlihat jelas: pada kelompok tidak rutin sayur, aktivitas fisik menurunkan prevalensi dari 65,06% → 52,10%. Pada kelompok aktif fisik, konsumsi sayuran rutin menurunkan prevalensi dari 52,10% → 43,34%. Uji Chi-Square menghasilkan nilai statistik 2026,84 dengan <b>p-value &lt; 0,001</b>, membuktikan perbedaan ini signifikan secara statistik.<br><br>
     <b>Implikasi:</b> Aktivitas fisik dan konsumsi sayuran mudah diperoleh dari pengguna tanpa pemeriksaan medis, sehingga sangat cocok sebagai komponen skrining awal berbasis web atau aplikasi.</p>
@@ -704,14 +779,14 @@ elif menu == "🥗 Q2 — Gaya Hidup & Kebiasaan":
 # PAGE: Q3 — DEMOGRAFIS: USIA & BMI
 # ============================================================
 
-elif menu == "👤 Q3 — Demografis: Usia & BMI":
-    st.title("Q3 — Demografis: Usia & BMI")
-    st.markdown(
-        "<span style='color:#737373;'>Bagaimana distribusi prevalensi diabetes berdasarkan "
-        "kelompok usia dan kategori BMI Asia-Pacific?</span>",
-        unsafe_allow_html=True
-    )
-    st.divider()
+elif menu == "Demographics & BMI":
+    st.markdown("""
+    <div class="hero-card">
+        <div class="hero-badge">Analisis Demografis</div>
+        <h1 class="hero-title">Q3 — Demografis: Usia & BMI</h1>
+        <p class="hero-desc">Bagaimana distribusi prevalensi diabetes berdasarkan kelompok usia dan kategori BMI Asia-Pacific?</p>
+    </div>
+    """, unsafe_allow_html=True)
 
     age_order = ["18-34","35-49","50-64","65+"]
     bmi_order = ["Underweight","Normal","Overweight","Obesity I","Obesity II"]
@@ -726,9 +801,13 @@ elif menu == "👤 Q3 — Demografis: Usia & BMI":
 
     with col1:
         st.subheader("Heatmap Prevalensi Diabetes (Usia × BMI)")
+        hm_scale = (
+            [[0,"#0e1615"],[0.5,"#43C59A"],[1,"#f25c5c"]] if is_dark
+            else [[0,"#f4FAF8"],[0.5,"#33b087"],[1,"#dc2626"]]
+        )
         fig_hm = px.imshow(
             heatmap_data, text_auto=True,
-            color_continuous_scale=[[0,"#f7f7f7"],[0.5,"#d97b45"],[1,"#dc2626"]],
+            color_continuous_scale=hm_scale,
             labels=dict(x="Kategori BMI Asia-Pacific", y="Kelompok Usia",
                         color="Prevalensi (%)"),
             aspect="auto"
@@ -742,16 +821,16 @@ elif menu == "👤 Q3 — Demografis: Usia & BMI":
         st.subheader("Tabel Prevalensi (%)")
         st.dataframe(
             heatmap_data.style.format("{:.1f}")
-            .bar(color="#d97b4555"),
+            .bar(color="#43C59A55"),
             use_container_width=True
         )
         max_val = heatmap_data.max().max()
         min_val = heatmap_data.min().min()
         max_idx = heatmap_data.stack().idxmax()
         min_idx = heatmap_data.stack().idxmin()
-        st.metric("🔺 Prevalensi Tertinggi", f"{max_val:.1f}%",
+        st.metric("Prevalensi Tertinggi", f"{max_val:.1f}%",
                   f"Usia {max_idx[0]} × BMI {max_idx[1]}")
-        st.metric("🔻 Prevalensi Terendah", f"{min_val:.1f}%",
+        st.metric("Prevalensi Terendah", f"{min_val:.1f}%",
                   f"Usia {min_idx[0]} × BMI {min_idx[1]}")
 
     st.divider()
@@ -802,10 +881,10 @@ elif menu == "👤 Q3 — Demografis: Usia & BMI":
         apply_theme(fig_bmicat, 320)
         st.plotly_chart(fig_bmicat, use_container_width=True)
 
-    st.markdown("""<div class="insight-box">
-    <h4>👤 Insight — Demografis: Usia & BMI</h4>
-    <p>Heatmap menunjukkan pola yang sangat jelas: prevalensi diabetes meningkat konsisten seiring bertambahnya usia dan meningkatnya kategori BMI.<br><br>
-    Pada usia <b>18–34 tahun</b>, prevalensi berada di kisaran 5,3%–5,7% untuk kategori underweight hingga overweight, namun melonjak ke <b>22,3%</b> pada Obesity II. Pola yang sama terlihat di usia <b>35–49 tahun</b> (9,8% → 47,3%) dan <b>50–64 tahun</b> (20,4% → 67,1%).<br><br>
+    st.markdown("""<div class="hero-card">
+    <h1 class="hero-title">Insight — Demografis: Usia & BMI</h1>
+    <p class="hero-desc">Heatmap menunjukkan pola yang sangat jelas: prevalensi diabetes meningkat konsisten seiring bertambahnya usia dan meningkatnya kategori BMI.<br><br>
+    Pada usia <b>18–34 tahun</b>, prevalensi berada di kisaran 5,3%–5,7% untuk kategori underweight hingga overweight, namun melonjak ke <b>22,3%</b> pada Obesity II. Pola yang sama terlihat di usia <b>35–49 tahun</b> (9,8% → 47,3%) and <b>50–64 tahun</b> (20,4% → 67,1%).<br><br>
     Prevalensi tertinggi ditemukan pada <b>usia 65+ dengan Obesity II sebesar 75,9%</b> — tiga dari empat individu pada kelompok ini adalah penderita diabetes. Sebaliknya, prevalensi terendah ada pada usia 18–34 dengan BMI normal/underweight, hanya sekitar <b>5%</b>.<br><br>
     Perbedaan antara kelompok risiko terendah dan tertinggi mencapai lebih dari <b>70 poin persentase</b>.<br><br>
     <b>Implikasi:</b> Usia dan BMI merupakan variabel paling efektif untuk segmentasi risiko tanpa memerlukan pemeriksaan laboratorium — ideal untuk sistem skrining berbasis web atau aplikasi.</p>
@@ -816,14 +895,14 @@ elif menu == "👤 Q3 — Demografis: Usia & BMI":
 # PAGE: Q4 — KOMORBIDITAS KLINIS
 # ============================================================
 
-elif menu == "❤️ Q4 — Komorbiditas Klinis":
-    st.title("Q4 — Komorbiditas Klinis")
-    st.markdown(
-        "<span style='color:#737373;'>Seberapa besar pengaruh akumulasi komorbiditas klinis "
-        "(HighBP, HighChol, HeartDisease, Stroke) terhadap probabilitas diabetes?</span>",
-        unsafe_allow_html=True
-    )
-    st.divider()
+elif menu == "Metabolic Risk":
+    st.markdown("""
+    <div class="hero-card">
+        <div class="hero-badge">Analisis Komorbiditas</div>
+        <h1 class="hero-title">Q4 — Komorbiditas Klinis</h1>
+        <p class="hero-desc">Seberapa besar pengaruh akumulasi komorbiditas klinis (HighBP, HighChol, HeartDisease, Stroke) terhadap probabilitas diabetes?</p>
+    </div>
+    """, unsafe_allow_html=True)
 
     risk_table = df_filtered.groupby("metabolic_risk_score")["Diabetes_binary"].agg(
         ["mean","count"]
@@ -848,16 +927,19 @@ elif menu == "❤️ Q4 — Komorbiditas Klinis":
     with col1:
         st.subheader("Tren Prevalensi vs Jumlah Komorbiditas")
         fig_risk = go.Figure()
+        accent_color = C["accent"]
+        marker_color = "#e3ede9" if is_dark else "#182d28"
+        fill_color = "rgba(67,197,154,0.12)" if is_dark else "rgba(51,176,135,0.08)"
         fig_risk.add_trace(go.Scatter(
             x=risk_table["Jumlah Komorbiditas"],
             y=risk_table["Prevalensi Diabetes (%)"],
             mode="lines+markers+text",
             text=[f"{v:.1f}%" for v in risk_table["Prevalensi Diabetes (%)"]],
             textposition="top center",
-            line=dict(color="#2dd4a3", width=2.5),
-            marker=dict(size=10, color="#1a1a1a"),
+            line=dict(color=accent_color, width=2.5),
+            marker=dict(size=10, color=marker_color, line=dict(color=accent_color, width=2)),
             fill="tozeroy",
-            fillcolor="rgba(26,26,26,0.07)"
+            fillcolor=fill_color
         ))
         apply_theme(fig_risk, 380)
         fig_risk.update_layout(
@@ -872,7 +954,7 @@ elif menu == "❤️ Q4 — Komorbiditas Klinis":
             risk_table.style.format({
                 "Prevalensi Diabetes (%)": "{:.2f}%",
                 "Jumlah Responden": "{:,}"
-            }).bar(subset=["Prevalensi Diabetes (%)"], color="#1a1a1a33"),
+            }).bar(subset=["Prevalensi Diabetes (%)"], color="#43C59A33"),
             use_container_width=True
         )
 
@@ -914,9 +996,9 @@ elif menu == "❤️ Q4 — Komorbiditas Klinis":
             )
             st.plotly_chart(fig_c, use_container_width=True)
 
-    st.markdown("""<div class="insight-box">
-    <h4>❤️ Insight — Komorbiditas Klinis</h4>
-    <p>Terdapat hubungan yang sangat kuat antara jumlah komorbiditas klinis (hipertensi, kolesterol tinggi, penyakit jantung, stroke) dan prevalensi diabetes.<br><br>
+    st.markdown("""<div class="hero-card">
+    <h1 class="hero-title">Insight — Komorbiditas Klinis</h1>
+    <p class="hero-desc">Terdapat hubungan yang sangat kuat antara jumlah komorbiditas klinis (hipertensi, kolesterol tinggi, penyakit jantung, stroke) dan prevalensi diabetes.<br><br>
     Kelompok <b>tanpa komorbiditas</b> memiliki prevalensi 19,09%. Dengan satu komorbiditas meningkat menjadi <b>46,19%</b>, dua komorbiditas <b>69,45%</b>, tiga komorbiditas <b>77,97%</b>, dan empat komorbiditas mencapai <b>84,02%</b>.<br><br>
     Metabolic Risk Score (gabungan keempat komorbiditas) memiliki korelasi <b>r = 0,4248</b> terhadap diabetes — bahkan melampaui GenHlth (0,4076) yang sebelumnya merupakan fitur individu dengan korelasi tertinggi. Ini menunjukkan bahwa kombinasi indikator klinis mampu menjelaskan status diabetes lebih baik daripada fitur tunggal manapun.<br><br>
     <b>Implikasi:</b> Metabolic Risk Score sangat potensial digunakan sebagai indikator tunggal dalam sistem skrining karena merangkum kondisi klinis kompleks ke dalam satu skor yang mudah dipahami pengguna maupun tenaga kesehatan.</p>
@@ -926,14 +1008,14 @@ elif menu == "❤️ Q4 — Komorbiditas Klinis":
 # PAGE: Q5 — SOSIAL-EKONOMI & AKSES KESEHATAN
 # ============================================================
 
-elif menu == "💰 Q5 — Sosial-Ekonomi & Akses":
-    st.title("Q5 — Sosial-Ekonomi & Akses Kesehatan")
-    st.markdown(
-        "<span style='color:#737373;'>Apakah individu dengan pendapatan rendah dan "
-        "hambatan biaya kesehatan memiliki prevalensi diabetes lebih tinggi?</span>",
-        unsafe_allow_html=True
-    )
-    st.divider()
+elif menu == "Socioeconomic Analysis":
+    st.markdown("""
+    <div class="hero-card">
+        <div class="hero-badge">Analisis Sosial Ekonomi</div>
+        <h1 class="hero-title">Q5 — Sosial-Ekonomi & Akses Kesehatan</h1>
+        <p class="hero-desc">Apakah individu dengan pendapatan rendah dan hambatan biaya kesehatan memiliki prevalensi diabetes lebih tinggi?</p>
+    </div>
+    """, unsafe_allow_html=True)
 
     income_label = {
         1:"1(terendah)", 2:"2", 3:"3", 4:"4",
@@ -951,16 +1033,19 @@ elif menu == "💰 Q5 — Sosial-Ekonomi & Akses":
     with col1:
         st.subheader("Prevalensi Diabetes Berdasarkan Tingkat Pendapatan")
         fig_income = go.Figure()
+        accent_color = C["accent"]
+        marker_color = "#e3ede9" if is_dark else "#182d28"
+        fill_color = "rgba(67,197,154,0.12)" if is_dark else "rgba(51,176,135,0.08)"
         fig_income.add_trace(go.Scatter(
             x=income_table["Keterangan"],
             y=income_table["Prevalensi Diabetes (%)"],
             mode="lines+markers+text",
             text=[f"{v:.1f}%" for v in income_table["Prevalensi Diabetes (%)"]],
             textposition="top center",
-            line=dict(color="#2dd4a3", width=2.5),
-            marker=dict(size=9, color="#1a1a1a"),
+            line=dict(color=accent_color, width=2.5),
+            marker=dict(size=9, color=marker_color, line=dict(color=accent_color, width=1.5)),
             fill="tozeroy",
-            fillcolor="rgba(26,26,26,0.07)"
+            fillcolor=fill_color
         ))
         apply_theme(fig_income, 380)
         fig_income.update_layout(
@@ -974,11 +1059,11 @@ elif menu == "💰 Q5 — Sosial-Ekonomi & Akses":
         st.dataframe(
             income_table[["Income Level","Keterangan","Prevalensi Diabetes (%)"]].style.format(
                 {"Prevalensi Diabetes (%)": "{:.2f}%"}
-            ).bar(subset=["Prevalensi Diabetes (%)"], color="#1a1a1a33"),
-            use_container_width=True
+            ).bar(subset=["Prevalensi Diabetes (%)"], color=C["accent"] + "33"),
+            use_container_width=True, height=280
         )
         diff = income_table["Prevalensi Diabetes (%)"].max() - income_table["Prevalensi Diabetes (%)"].min()
-        st.metric("📉 Selisih Tertinggi – Terendah", f"{diff:.2f} pp")
+        st.metric("Selisih Tertinggi – Terendah", f"{diff:.2f} pp")
 
     st.divider()
     st.subheader("Hambatan Biaya Kesehatan (NoDocbcCost)")
@@ -1013,7 +1098,7 @@ elif menu == "💰 Q5 — Sosial-Ekonomi & Akses":
             st.metric("P-value", f"{p_n:.6f}")
             st.metric("Derajat Kebebasan", dof_n)
             if p_n < 0.05:
-                st.success("✅ SIGNIFIKAN secara statistik (p < 0.05)")
+                st.success("SIGNIFIKAN secara statistik (p < 0.05)")
             else:
                 st.warning("Tidak signifikan (p ≥ 0.05)")
         except Exception:
@@ -1027,9 +1112,9 @@ elif menu == "💰 Q5 — Sosial-Ekonomi & Akses":
         nodoc_table["NoDocbcCost"] = nodoc_table["NoDocbcCost"].map({0:"Tidak Terhambat",1:"Terhambat Biaya"})
         st.dataframe(nodoc_table, use_container_width=True, hide_index=True)
 
-    st.markdown("""<div class="insight-box">
-    <h4>💰 Insight — Sosial-Ekonomi & Akses Kesehatan</h4>
-    <p>Terdapat hubungan konsisten antara tingkat pendapatan dan prevalensi diabetes. Kelompok <b>pendapatan terendah</b> memiliki prevalensi <b>65,99%</b>, sedangkan kelompok <b>pendapatan tertinggi</b> hanya <b>34,85%</b> — selisih <b>31,14 poin persentase</b>, hampir dua kali lipat.<br><br>
+    st.markdown("""<div class="hero-card">
+    <h1 class="hero-title">Insight — Sosial-Ekonomi & Akses Kesehatan</h1>
+    <p class="hero-desc">Terdapat hubungan konsisten antara tingkat pendapatan dan prevalensi diabetes. Kelompok <b>pendapatan terendah</b> memiliki prevalensi <b>65,99%</b>, sedangkan kelompok <b>pendapatan tertinggi</b> hanya <b>34,85%</b> — selisih <b>31,14 poin persentase</b>, hampir dua kali lipat.<br><br>
     Pola menurun cukup konsisten: setelah mencapai puncak pada Income Level 2 sebesar 68,61%, prevalensi diabetes terus turun seiring meningkatnya pendapatan hingga titik terendah di Income Level 8.<br><br>
     Uji Chi-Square terhadap variabel <b>NoDocbcCost</b> (hambatan biaya ke dokter) menghasilkan <b>p-value &lt; 0,001</b>, membuktikan hubungan signifikan secara statistik antara hambatan biaya kesehatan dan status diabetes.<br><br>
     <b>Implikasi:</b> Tingkat pendapatan dan hambatan biaya memberikan informasi tambahan yang tidak sepenuhnya tercermin oleh indikator klinis. Kedua variabel ini layak dipertahankan dalam sistem skrining risiko diabetes karena mencerminkan dimensi sosial-ekonomi yang nyata.</p>
@@ -1040,7 +1125,7 @@ elif menu == "💰 Q5 — Sosial-Ekonomi & Akses":
 # PAGE: KESIMPULAN Analisis
 # ============================================================
 
-elif menu == "📝 Kesimpulan Analisis":
+elif menu == "Conclusions":
     st.title("Kesimpulan Akhir Analisis Diabetes Indonesia")
     st.markdown(
         f"<span style='color:{'#6b8fa8' if is_dark else '#4a7a6a'};font-size:0.95rem;'>"
@@ -1051,9 +1136,9 @@ elif menu == "📝 Kesimpulan Analisis":
     st.divider()
 
     # ── INTRO BOX ─────────────────────────────────────────────
-    st.markdown("""<div class="insight-box">
-    <h4>🔬 Gambaran Umum</h4>
-    <p>Diabetes terbukti merupakan kondisi multidimensi yang tidak dapat dijelaskan oleh satu faktor tunggal.
+    st.markdown("""<div class="hero-card">
+    <h1 class="hero-title">Gambaran Umum</h1>
+    <p class="hero-desc">Diabetes terbukti merupakan kondisi multidimensi yang tidak dapat dijelaskan oleh satu faktor tunggal.
     Hasil Analisis menunjukkan bahwa interaksi antara faktor klinis, kebiasaan hidup, kelompok usia, akumulasi
     komorbiditas, dan kondisi sosial-ekonomi secara bersama-sama membentuk profil risiko seseorang.
     Tidak ada variabel yang berdiri sendiri — semua saling memperkuat.</p>
@@ -1066,7 +1151,7 @@ elif menu == "📝 Kesimpulan Analisis":
 
     findings = [
         {
-            "q": "Q1 — Faktor Risiko Utama", "emoji": "📊",
+            "q": "Q1 — Faktor Risiko Utama",
             "color": C["accent"],
             "finding": (
                 "GenHlth (|r|=0,41), HighBP (|r|=0,38), BMI (|r|=0,29), HighChol (|r|=0,29), dan Age (|r|=0,28) "
@@ -1079,7 +1164,7 @@ elif menu == "📝 Kesimpulan Analisis":
             "implication": "Sistem skrining harus memprioritaskan indikator klinis sebagai input utama. Kelima variabel ini menjadi kandidat fitur terkuat untuk tahap pemodelan machine learning."
         },
         {
-            "q": "Q2 — Gaya Hidup & Kebiasaan", "emoji": "🥗",
+            "q": "Q2 — Gaya Hidup & Kebiasaan",
             "color": C["accent"],
             "finding": (
                 "Kelompok tidak aktif fisik + jarang sayur memiliki prevalensi diabetes 65,06% — sekitar "
@@ -1091,7 +1176,7 @@ elif menu == "📝 Kesimpulan Analisis":
             "implication": "Aktivitas fisik dan pola makan adalah pertanyaan skrining yang mudah dikumpulkan tanpa pemeriksaan klinis — cocok sebagai komponen awal sistem skrining berbasis aplikasi."
         },
         {
-            "q": "Q3 — Demografis: Usia & BMI", "emoji": "👤",
+            "q": "Q3 — Demografis: Usia & BMI",
             "color": C["warning"],
             "finding": (
                 "Prevalensi meningkat konsisten pada setiap kombinasi usia dan BMI. Titik terendah: "
@@ -1103,7 +1188,7 @@ elif menu == "📝 Kesimpulan Analisis":
             "implication": "Usia dan BMI sangat efektif untuk segmentasi risiko tanpa pemeriksaan laboratorium. Keduanya menjadi filter pertama yang ideal dalam alur skrining digital."
         },
         {
-            "q": "Q4 — Komorbiditas Klinis", "emoji": "❤️",
+            "q": "Q4 — Komorbiditas Klinis",
             "color": C["danger"],
             "finding": (
                 "Metabolic Risk Score (gabungan HighBP + HighChol + HeartDiseaseorAttack + Stroke) menunjukkan "
@@ -1115,7 +1200,7 @@ elif menu == "📝 Kesimpulan Analisis":
             "implication": "Metabolic Risk Score berpotensi digunakan sebagai indikator ringkas yang mudah dipahami pengguna dan tenaga kesehatan untuk menilai tingkat risiko secara cepat."
         },
         {
-            "q": "Q5 — Sosial-Ekonomi & Akses", "emoji": "💰",
+            "q": "Q5 — Sosial-Ekonomi & Akses",
             "color": C["info"],
             "finding": (
                 "Prevalensi pada kelompok pendapatan terendah mencapai 65,99%, hampir dua kali lipat "
@@ -1128,23 +1213,24 @@ elif menu == "📝 Kesimpulan Analisis":
         },
     ]
 
-    _bg_card   = "#0d2233" if is_dark else "#f0fdf6"
-    _border    = "#1a3a4a" if is_dark else "#b8e0d4"
-    _text_main = "#e8f4f0" if is_dark else "#0a1628"
-    _text_muted = "#6b8fa8" if is_dark else "#4a7a6a"
+    _bg_card   = "#0e1615" if is_dark else "#ffffff"
+    _border    = "#182825" if is_dark else "#d8ece5"
+    _text_main = "#e3ede9" if is_dark else "#1a2e28"
+    _text_muted = "#8ba6a0" if is_dark else "#6b8a80"
 
     for f in findings:
         st.markdown(f"""
         <div style="border:1px solid {_border}; border-left:5px solid {f['color']};
-             background:{_bg_card}; padding:1rem 1.25rem;
-             border-radius:0 0.75rem 0.75rem 0; margin-bottom:0.875rem;">
+             background:{_bg_card}; padding:1.15rem 1.35rem;
+             border-radius:0.75rem; margin-bottom:0.875rem;
+             box-shadow: 0 4px 16px rgba(0,0,0,{'0.2' if is_dark else '0.03'});">
             <div style="font-weight:700; color:{f['color']}; margin-bottom:0.4rem; font-size:0.95rem;">
-                {f['emoji']} {f['q']}
+                {f['q']}
             </div>
-            <p style="margin:0 0 0.4rem 0; font-size:0.88rem; color:{_text_main}; line-height:1.65;">
+            <p style="margin:0 0 0.4rem 0; font-size:0.88rem; color:{_text_main}; line-height:1.7;">
                 <b>Temuan:</b> {f['finding']}
             </p>
-            <p style="margin:0; font-size:0.85rem; color:{_text_muted};">
+            <p style="margin:0; font-size:0.85rem; color:{_text_muted}; line-height:1.6;">
                 <b>Implikasi:</b> {f['implication']}
             </p>
         </div>""", unsafe_allow_html=True)
@@ -1157,15 +1243,15 @@ elif menu == "📝 Kesimpulan Analisis":
 
     with c1:
         st.markdown(f"""
-        <div style="background:{'#1a0d0d' if is_dark else '#fff5f5'};
-             border:1px solid {'#4a1a1a' if is_dark else '#fca5a5'};
+        <div style="background:{'#1f1111' if is_dark else '#fff5f5'};
+             border:1px solid {'#3a1c1c' if is_dark else '#ffd1d1'};
              border-top:4px solid {C['danger']};
              padding:1.25rem; border-radius:0.75rem;">
             <div style="font-weight:700; color:{C['danger']}; margin-bottom:0.75rem; font-size:1rem;">
-                🔴 Profil Risiko TINGGI
+                Profil Risiko Tinggi
             </div>
             <ul style="margin:0; padding-left:1.25rem; font-size:0.88rem; line-height:2;
-                       color:{'#e8c0c0' if is_dark else '#7f1d1d'};">
+                       color:{'#ffd1d1' if is_dark else '#991b1b'};">
                 <li>Usia 65 tahun ke atas</li>
                 <li>BMI kategori Obesity I atau Obesity II</li>
                 <li>Memiliki hipertensi dan/atau kolesterol tinggi</li>
@@ -1178,15 +1264,15 @@ elif menu == "📝 Kesimpulan Analisis":
 
     with c2:
         st.markdown(f"""
-        <div style="background:{'#0a1e18' if is_dark else '#f0fdf6'};
-             border:1px solid {'#1a4a3a' if is_dark else '#6ee7b7'};
+        <div style="background:{'#0c1a17' if is_dark else '#f0faf7'};
+             border:1px solid {'#18342e' if is_dark else '#c6eade'};
              border-top:4px solid {C['accent']};
              padding:1.25rem; border-radius:0.75rem;">
             <div style="font-weight:700; color:{C['accent']}; margin-bottom:0.75rem; font-size:1rem;">
-                🟢 Profil Risiko RENDAH
+                Profil Risiko Rendah
             </div>
             <ul style="margin:0; padding-left:1.25rem; font-size:0.88rem; line-height:2;
-                       color:{'#a8cfc0' if is_dark else '#065f46'};">
+                       color:{'#bcd1cc' if is_dark else '#0f7053'};">
                 <li>Usia 18–34 tahun</li>
                 <li>BMI normal atau underweight (standar Asia-Pacific)</li>
                 <li>Tidak memiliki hipertensi maupun kolesterol tinggi</li>
@@ -1203,34 +1289,35 @@ elif menu == "📝 Kesimpulan Analisis":
     st.subheader("Rekomendasi Strategis")
 
     recs = [
-        ("🏋️", "Pengendalian Berat Badan",
+        ("⚖️", "Pengendalian Berat Badan",
          "Program penurunan berat badan dan pengelolaan obesitas harus menjadi prioritas utama, terutama pada kelompok usia 35 tahun ke atas — kombinasi usia dan BMI tinggi membawa prevalensi diabetes hingga 75,9%."),
-        ("💊", "Manajemen Hipertensi & Kolesterol",
+        ("🩺", "Manajemen Hipertensi & Kolesterol",
          "Deteksi dan pengelolaan HighBP serta HighChol secara dini dapat memutus rantai komorbiditas. Keduanya adalah dua dari lima faktor paling prediktif dalam dataset dan berkontribusi langsung pada Metabolic Risk Score."),
-        ("🚶", "Peningkatan Aktivitas Fisik",
+        ("🏃‍♂️", "Peningkatan Aktivitas Fisik",
          "Mendorong aktivitas fisik rutin dapat menurunkan prevalensi diabetes hingga 12,96 poin persentase bahkan tanpa perubahan pola makan. Terbukti signifikan secara statistik (p<0,001)."),
-        ("🥦", "Edukasi Pola Makan Sehat",
+        ("🥗", "Edukasi Pola Makan Sehat",
          "Konsumsi sayuran rutin memberikan efek protektif tambahan di atas aktivitas fisik. Keduanya sebaiknya dikemas sebagai paket intervensi gaya hidup yang terintegrasi, bukan program terpisah."),
         ("👴", "Skrining Dini Kelompok Usia Lanjut",
          "Kelompok usia 50+ menunjukkan lonjakan prevalensi signifikan bahkan pada BMI normal (20,4%). Program skrining proaktif dan berkala pada kelompok ini berpotensi mendeteksi kasus lebih awal."),
         ("🏥", "Akses Layanan Kesehatan Merata",
-         "Kelompok pendapatan rendah memiliki prevalensi hampir dua kali lipat kelompok pendapatan tinggi. Subsidi layanan dan program skrining gratis dapat menjangkau populasi berisiko tinggi yang kurang terlayani."),
+         "Kelompok pendapatan rendah memiliki prevalensi hampir dua kali lipat kelompok pendapatan tertinggi. Subsidi layanan dan program skrining gratis dapat menjangkau populasi berisiko tinggi yang kurang terlayani."),
     ]
 
-    _card_bg   = "#0d2233" if is_dark else "#f0fdf6"
-    _card_border = "#1a3a4a" if is_dark else "#b8e0d4"
-    _card_txt  = "#6b8fa8" if is_dark else "#4a7a6a"
-    _title_c   = "#e8f4f0" if is_dark else "#0a1628"
+    _card_bg   = "#0e1615" if is_dark else "#ffffff"
+    _card_border = "#182825" if is_dark else "#d8ece5"
+    _card_txt  = "#8ba6a0" if is_dark else "#6b8a80"
+    _title_c   = "#e3ede9" if is_dark else "#1a2e28"
 
     cols_r = st.columns(2)
     for i, (emoji, title, desc) in enumerate(recs):
         with cols_r[i % 2]:
             st.markdown(f"""
-            <div style="background:{_card_bg}; border-radius:0.75rem; padding:1rem 1.15rem;
+            <div style="background:{_card_bg}; border-radius:0.75rem; padding:1.15rem 1.35rem;
                  border:1px solid {_card_border}; border-top:4px solid {C['accent']};
-                 margin-bottom:1rem;">
-                <p style="font-size:0.95rem; font-weight:700; margin:0 0 0.4rem;
-                          color:{_title_c};">{emoji} {title}</p>
+                 margin-bottom:1rem;
+                 box-shadow: 0 4px 16px rgba(0,0,0,{'0.2' if is_dark else '0.03'});">
+                <p style="font-size:0.95rem; font-weight:700; margin:0 0 0.45rem;
+                          color:{_title_c};">{emoji} &nbsp;{title}</p>
                 <p style="color:{_card_txt}; margin:0; font-size:0.86rem;
                           line-height:1.65;">{desc}</p>
             </div>""", unsafe_allow_html=True)
@@ -1238,9 +1325,9 @@ elif menu == "📝 Kesimpulan Analisis":
     st.divider()
 
     # ── KESIMPULAN AKHIR ───────────────────────────────────────
-    st.markdown("""<div class="insight-box">
-    <h4>🎯 Kesimpulan Akhir</h4>
-    <p>Profil individu dengan risiko diabetes tertinggi adalah mereka yang berusia lanjut, memiliki BMI
+    st.markdown("""<div class="hero-card">
+    <h1 class="hero-title">Kesimpulan Akhir</h1>
+    <p class="hero-desc">Profil individu dengan risiko diabetes tertinggi adalah mereka yang berusia lanjut, memiliki BMI
     tinggi (obesitas), mengalami hipertensi dan kolesterol tinggi, memiliki beberapa komorbiditas klinis,
     menjalani gaya hidup kurang aktif, serta berada pada kondisi sosial-ekonomi yang terbatas.<br><br>
     Diabetes bukan kondisi yang dapat dijelaskan oleh satu faktor saja. Strategi pencegahan paling efektif
@@ -1252,7 +1339,7 @@ elif menu == "📝 Kesimpulan Analisis":
     </div>""", unsafe_allow_html=True)
 
     st.info(
-        "📌 **Catatan:** Dashboard ini dibangun berdasarkan EDA dataset BRFSS 2015. "
+        "**Catatan:** Dashboard ini dibangun berdasarkan EDA dataset BRFSS 2015. "
         "Hasil analisis bersifat deskriptif dan korelasional, bukan kausal. "
         "Diperlukan analisis lanjutan (modeling ML) untuk membangun sistem prediksi diabetes."
     )
