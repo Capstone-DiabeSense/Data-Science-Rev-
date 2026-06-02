@@ -215,15 +215,17 @@ with st.sidebar:
     import os
 
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-    st.write("BASE_DIR =", BASE_DIR)
-    st.write("ISI FOLDER =", os.listdir(BASE_DIR))
-    st.write("CSV_PATH =", CSV_PATH)
     
     CSV_PATH = os.path.join(
         BASE_DIR,
         "clean_diabetes_analysis_final-4 (1).csv"
     )
+    
+    st.write("BASE_DIR =", BASE_DIR)
+    st.write("ISI FOLDER =", os.listdir(BASE_DIR))
+    st.write("CSV_PATH =", CSV_PATH)
+    st.write("FILE ADA?", os.path.exists(CSV_PATH))
+    
     try:
         df = load_data(CSV_PATH)
     
