@@ -221,16 +221,11 @@ with st.sidebar:
         "clean_diabetes_analysis_final-4 (1).csv"
     )
     
-    st.write("BASE_DIR =", BASE_DIR)
-    st.write("ISI FOLDER =", os.listdir(BASE_DIR))
-    st.write("CSV_PATH =", CSV_PATH)
-    st.write("FILE ADA?", os.path.exists(CSV_PATH))
-    
     try:
         df = load_data(CSV_PATH)
     
-    except FileNotFoundError:
-        st.error("Dataset clean_diabetes_analysis_final-4 (1).csv tidak ditemukan.")
+    except Exception as e:
+        st.exception(e)
         st.stop()
 
     status_filter = st.multiselect(
