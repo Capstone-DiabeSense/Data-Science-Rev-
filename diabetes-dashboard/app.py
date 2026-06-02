@@ -213,16 +213,22 @@ with st.sidebar:
     st.divider()
 
     uploaded_file = st.file_uploader(
-        "Upload dataset CSV", type=["csv"],
+        "Upload dataset CSV",
+        type=["csv"],
         help="Upload file clean_diabetes_analysis_final-4 (1).csv"
     )
-
+    
     if uploaded_file:
-        raw_df = pd.read_csv(uploaded_file)
-        st.success(f"{raw_df.shape[0]:,} baris dimuat")
+        uploaded_file.seek(0)
+    
+        df = load_data(uploaded_file)
+    
+        st.success(f"{df.shape[0]:,} baris dimuat")
+    
     else:
         try:
-            raw_df = pd.read_csv("clean_diabetes_analysis_final-4 (1).csv")
+            df = load_data("clean_diabetes_analysis_final-4 (1).csv")
+    
         except FileNotFoundError:
             st.error("File tidak ditemukan. Upload CSV di atas.")
             st.stop()
