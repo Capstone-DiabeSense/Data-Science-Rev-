@@ -212,8 +212,20 @@ with st.sidebar:
 
     st.divider()
 
+    import os
+
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+    st.write("BASE_DIR =", BASE_DIR)
+    st.write("ISI FOLDER =", os.listdir(BASE_DIR))
+    st.write("CSV_PATH =", CSV_PATH)
+    
+    CSV_PATH = os.path.join(
+        BASE_DIR,
+        "clean_diabetes_analysis_final-4 (1).csv"
+    )
     try:
-        df = load_data("clean_diabetes_analysis_final-4 (1).csv")
+        df = load_data(CSV_PATH)
     
     except FileNotFoundError:
         st.error("Dataset clean_diabetes_analysis_final-4 (1).csv tidak ditemukan.")
