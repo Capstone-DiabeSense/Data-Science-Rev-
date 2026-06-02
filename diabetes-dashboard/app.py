@@ -95,6 +95,37 @@ with st.sidebar:
 is_dark = st.session_state.dark_mode
 st.markdown(DARK_CSS if is_dark else LIGHT_CSS, unsafe_allow_html=True)
 
+# ── INJECT 3D GLOWING BULB IN HERO-CARD ─────────────────────
+import base64
+try:
+    with open("glowing_3d_bulb.png", "rb") as f:
+        bulb_base64 = base64.b64encode(f.read()).decode()
+    st.markdown(f"""
+    <style>
+    .hero-card.insight-card::after {{
+        right: 50px !important;
+        width: 250px !important;
+        height: 250px !important;
+        background-image: 
+            url("data:image/png;base64,{bulb_base64}"),
+            radial-gradient(circle, transparent 65%, rgba(255, 255, 255, 0.08) 66%, rgba(255, 255, 255, 0.08) 67%, transparent 68%),
+            radial-gradient(circle, transparent 48%, rgba(255, 255, 255, 0.06) 49%, rgba(255, 255, 255, 0.06) 50%, transparent 51%),
+            radial-gradient(circle, transparent 32%, rgba(255, 255, 255, 0.05) 33%, rgba(255, 255, 255, 0.05) 34%, transparent 35%),
+            radial-gradient(circle, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0) 60%) !important;
+        background-position: center center, center, center, center, center !important;
+        background-repeat: no-repeat !important;
+        background-size: contain, cover, cover, cover, cover !important;
+    }}
+    @media (max-width: 800px) {{
+        .hero-card.insight-card::after {{
+            display: none !important;
+        }}
+    }}
+    </style>
+    """, unsafe_allow_html=True)
+except Exception:
+    pass
+
 # ── PLOTLY THEME sesuai mode ───────────────────────────────
 PLOTLY_LAYOUT   = DARK_PLOTLY if is_dark else LIGHT_PLOTLY
 C               = get_colors(is_dark)
@@ -639,7 +670,7 @@ elif menu == "Risk Factors":
     fig_heat.update_layout(margin=dict(t=20,b=20))
     st.plotly_chart(fig_heat, use_container_width=True)
 
-    st.markdown("""<div class="hero-card">
+    st.markdown("""<div class="hero-card insight-card">
     <h1 class="hero-title">Insight — Faktor Risiko Utama</h1>
     <p class="hero-desc">Analisis korelasi terhadap 16 indikator kesehatan menunjukkan bahwa lima faktor dengan hubungan terkuat terhadap diabetes adalah <b>GenHlth</b> (|r| = 0,4076), <b>HighBP</b> (|r| = 0,3815), <b>BMI</b> (|r| = 0,2934), <b>HighChol</b> (|r| = 0,2892), dan <b>Age</b> (|r| = 0,2787).<br><br>
     GenHlth merupakan indikator tunggal terkuat — semakin buruk kondisi kesehatan yang dilaporkan responden, semakin sering ditemukan pada kelompok diabetes. HighBP berada di posisi kedua dengan nilai yang sangat dekat, menunjukkan bahwa hipertensi merupakan karakteristik yang paling sering menyertai penderita diabetes pada dataset ini.<br><br>
@@ -766,7 +797,7 @@ elif menu == "Lifestyle Analysis":
         fig_vg.update_layout(showlegend=False, yaxis_range=[0, max(vg.values)*1.2])
         st.plotly_chart(fig_vg, use_container_width=True)
 
-    st.markdown("""<div class="hero-card">
+    st.markdown("""<div class="hero-card insight-card">
     <h1 class="hero-title">Insight — Gaya Hidup & Kebiasaan</h1>
     <p class="hero-desc">Terdapat perbedaan prevalensi diabetes yang besar antar kelompok gaya hidup. Kelompok <b>tidak aktif fisik + tidak rutin sayur</b> memiliki prevalensi tertinggi sebesar <b>65,06%</b> — artinya sekitar dua dari tiga individu dalam kelompok ini adalah penderita diabetes.<br><br>
     Sebaliknya, kelompok <b>aktif fisik + rutin sayur</b> memiliki prevalensi terendah sebesar <b>43,34%</b>. Selisih antar kedua kelompok mencapai <b>21,72 poin persentase</b>.<br><br>
@@ -881,7 +912,7 @@ elif menu == "Demographics & BMI":
         apply_theme(fig_bmicat, 320)
         st.plotly_chart(fig_bmicat, use_container_width=True)
 
-    st.markdown("""<div class="hero-card">
+    st.markdown("""<div class="hero-card insight-card">
     <h1 class="hero-title">Insight — Demografis: Usia & BMI</h1>
     <p class="hero-desc">Heatmap menunjukkan pola yang sangat jelas: prevalensi diabetes meningkat konsisten seiring bertambahnya usia dan meningkatnya kategori BMI.<br><br>
     Pada usia <b>18–34 tahun</b>, prevalensi berada di kisaran 5,3%–5,7% untuk kategori underweight hingga overweight, namun melonjak ke <b>22,3%</b> pada Obesity II. Pola yang sama terlihat di usia <b>35–49 tahun</b> (9,8% → 47,3%) and <b>50–64 tahun</b> (20,4% → 67,1%).<br><br>
@@ -996,7 +1027,7 @@ elif menu == "Metabolic Risk":
             )
             st.plotly_chart(fig_c, use_container_width=True)
 
-    st.markdown("""<div class="hero-card">
+    st.markdown("""<div class="hero-card insight-card">
     <h1 class="hero-title">Insight — Komorbiditas Klinis</h1>
     <p class="hero-desc">Terdapat hubungan yang sangat kuat antara jumlah komorbiditas klinis (hipertensi, kolesterol tinggi, penyakit jantung, stroke) dan prevalensi diabetes.<br><br>
     Kelompok <b>tanpa komorbiditas</b> memiliki prevalensi 19,09%. Dengan satu komorbiditas meningkat menjadi <b>46,19%</b>, dua komorbiditas <b>69,45%</b>, tiga komorbiditas <b>77,97%</b>, dan empat komorbiditas mencapai <b>84,02%</b>.<br><br>
@@ -1112,7 +1143,7 @@ elif menu == "Socioeconomic Analysis":
         nodoc_table["NoDocbcCost"] = nodoc_table["NoDocbcCost"].map({0:"Tidak Terhambat",1:"Terhambat Biaya"})
         st.dataframe(nodoc_table, use_container_width=True, hide_index=True)
 
-    st.markdown("""<div class="hero-card">
+    st.markdown("""<div class="hero-card insight-card">
     <h1 class="hero-title">Insight — Sosial-Ekonomi & Akses Kesehatan</h1>
     <p class="hero-desc">Terdapat hubungan konsisten antara tingkat pendapatan dan prevalensi diabetes. Kelompok <b>pendapatan terendah</b> memiliki prevalensi <b>65,99%</b>, sedangkan kelompok <b>pendapatan tertinggi</b> hanya <b>34,85%</b> — selisih <b>31,14 poin persentase</b>, hampir dua kali lipat.<br><br>
     Pola menurun cukup konsisten: setelah mencapai puncak pada Income Level 2 sebesar 68,61%, prevalensi diabetes terus turun seiring meningkatnya pendapatan hingga titik terendah di Income Level 8.<br><br>

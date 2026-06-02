@@ -184,21 +184,26 @@ section[data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="st
     background-color: transparent !important;
     border: none !important;
 }}
-/* Make uploader fonts brand green (#43C59A) for legibility */
-section[data-testid="stSidebar"] [data-testid="stFileUploader"] * {{
-    color: #43C59A !important;
+/* Make uploader fonts white (#ffffff) for maximum legibility */
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stWidgetLabel"] * {{
+    color: #ffffff !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] * {{
+    color: #ffffff !important;
 }}
 section[data-testid="stSidebar"] [data-testid="stFileUploader"] svg {{
-    fill: #43C59A !important;
+    fill: #ffffff !important;
 }}
 /* Premium styled Browse Files button */
 section[data-testid="stSidebar"] [data-testid="stFileUploader"] button {{
     background-color: #43C59A !important;
-    color: #1a2e28 !important;
     border: none !important;
-    font-weight: 700 !important;
     border-radius: 0.5rem !important;
     padding: 0.5rem 1rem !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] button * {{
+    color: #0f4a35 !important;
+    font-weight: 700 !important;
 }}
 section[data-testid="stSidebar"] [data-testid="stFileUploader"] button:hover {{
     background-color: #33b087 !important;
@@ -536,21 +541,26 @@ section[data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="st
     background-color: transparent !important;
     border: none !important;
 }}
-/* Make uploader fonts brand green (#43C59A) */
-section[data-testid="stSidebar"] [data-testid="stFileUploader"] * {{
-    color: #43C59A !important;
+/* Make uploader fonts white (#ffffff) */
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stWidgetLabel"] * {{
+    color: #ffffff !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] * {{
+    color: #ffffff !important;
 }}
 section[data-testid="stSidebar"] [data-testid="stFileUploader"] svg {{
-    fill: #43C59A !important;
+    fill: #ffffff !important;
 }}
 /* Premium styled Browse Files button */
 section[data-testid="stSidebar"] [data-testid="stFileUploader"] button {{
     background-color: #43C59A !important;
-    color: #060b0a !important;
     border: none !important;
-    font-weight: 700 !important;
     border-radius: 0.5rem !important;
     padding: 0.5rem 1rem !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] button * {{
+    color: #0f4a35 !important;
+    font-weight: 700 !important;
 }}
 section[data-testid="stSidebar"] [data-testid="stFileUploader"] button:hover {{
     background-color: #33b087 !important;
